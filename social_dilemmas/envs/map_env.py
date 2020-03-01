@@ -74,6 +74,8 @@ class MapEnv(MultiAgentEnv):
             Specifies how to convert between ascii chars and colors
         """
         self.num_agents = num_agents
+        # TODO: Currently hardcoding
+        self.num_symbols = 3
         self.base_map = self.ascii_to_numpy(ascii_map)
         # map without agents or beams
         self.world_map = np.full((len(self.base_map), len(self.base_map[0])), ' ')
@@ -163,7 +165,8 @@ class MapEnv(MultiAgentEnv):
         self.beam_pos = []
         agent_actions = {}
         for agent_id, action in actions.items():
-            agent_action = self.agents[agent_id].action_map(action)
+            # TODO: action[0] means grabbing only the 'move' action not the symbol
+            agent_action = self.agents[agent_id].action_map(action[0])
             agent_actions[agent_id] = agent_action
 
         # move
@@ -190,7 +193,10 @@ class MapEnv(MultiAgentEnv):
             agent.grid = map_with_agents
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
             rgb_arr = self.rotate_view(agent.orientation, rgb_arr)
-            observations[agent.agent_id] = rgb_arr
+
+            # the int here is important for this version of gym
+            observations[agent.agent_id] = (rgb_arr, np.zeros(self.num_agents, dtype=int))
+
             rewards[agent.agent_id] = agent.compute_reward()
             dones[agent.agent_id] = agent.get_done()
         dones["__all__"] = np.any(list(dones.values()))
@@ -222,7 +228,9 @@ class MapEnv(MultiAgentEnv):
             # agent.grid = util.return_view(map_with_agents, agent.pos,
             #                               agent.row_size, agent.col_size)
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
-            observations[agent.agent_id] = rgb_arr
+
+            # the int here is important for this version of gym
+            observations[agent.agent_id] = (rgb_arr, np.zeros(self.num_agents, dtype=int))
         return observations
 
     @property

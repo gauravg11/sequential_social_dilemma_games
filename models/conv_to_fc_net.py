@@ -8,12 +8,13 @@
 
 import tensorflow as tf
 
-from ray.rllib.models.misc import normc_initializer, flatten
-from ray.rllib.models.model import Model
 import tensorflow.contrib.slim as slim
 
+from ray.rllib.models.tf.recurrent_tf_modelv2 import RecurrentTFModelV2
+from ray.rllib.models.tf.misc import normc_initializer, get_activation_fn, flatten
 
-class ConvToFCNet(Model):
+
+class ConvToFCNet(RecurrentTFModelV2):
     def _build_layers_v2(self, input_dict, num_outputs, options):
 
         inputs = input_dict["obs"]

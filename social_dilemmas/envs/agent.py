@@ -1,7 +1,6 @@
 """Base class for an agent that defines the possible actions. """
 
-from gym.spaces import Box
-from gym.spaces import Discrete
+from gym.spaces import Box, Discrete, Tuple, MultiDiscrete
 import numpy as np
 import utility_funcs as util
 
@@ -211,14 +210,26 @@ class CleanupAgent(Agent):
         self.update_agent_pos(start_pos)
         self.update_agent_rot(start_orientation)
 
+        #TODO: Currently hardcoding
+        self.num_agents = 5
+        self.num_symbols = 3
+
     @property
     def action_space(self):
-        return Discrete(9)
+        action_dimension = [9]
+        for i in range(self.num_agents):
+            action_dimension.append(self.num_symbols)
+        return MultiDiscrete(action_dimension)
 
     @property
     def observation_space(self):
-        return Box(low=0.0, high=0.0, shape=(2 * self.view_len + 1,
+        action_dimension = []
+        for i in range(self.num_agents):
+            action_dimension.append(self.num_symbols)
+        return Tuple((Box(low=0.0, high=255.0, shape=(2 * self.view_len + 1,
                                              2 * self.view_len + 1, 3), dtype=np.float32)
+                     ,
+                     MultiDiscrete(action_dimension)))
 
     # Ugh, this is gross, this leads to the actions basically being
     # defined in two places
