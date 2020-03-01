@@ -14,8 +14,8 @@ SPAWN_PROB = [0, 0.005, 0.02, 0.05]
 
 class HarvestEnv(MapEnv):
 
-    def __init__(self, ascii_map=HARVEST_MAP, num_agents=1, render=False):
-        super().__init__(ascii_map, num_agents, render)
+    def __init__(self, ascii_map=HARVEST_MAP, num_agents=1, num_symbols=3, render=False):
+        super().__init__(ascii_map, num_agents, num_symbols, render)
         self.apple_points = []
         for row in range(self.base_map.shape[0]):
             for col in range(self.base_map.shape[1]):
@@ -40,7 +40,7 @@ class HarvestEnv(MapEnv):
             spawn_point = self.spawn_point()
             rotation = self.spawn_rotation()
             grid = map_with_agents
-            agent = HarvestAgent(agent_id, spawn_point, rotation, grid)
+            agent = HarvestAgent(agent_id, spawn_point, rotation, grid, self.num_agents, self.num_symbols)
             # grid = util.return_view(map_with_agents, spawn_point,
             #                         HARVEST_VIEW_SIZE, HARVEST_VIEW_SIZE)
             # agent = HarvestAgent(agent_id, spawn_point, rotation, grid)

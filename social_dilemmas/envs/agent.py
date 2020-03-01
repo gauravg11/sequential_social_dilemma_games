@@ -16,7 +16,7 @@ BASE_ACTIONS = {0: 'MOVE_LEFT',  # Move left
 
 class Agent(object):
 
-    def __init__(self, agent_id, start_pos, start_orientation, grid, row_size, col_size):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, row_size, col_size, num_agents, num_symbols):
         """Superclass for all agents.
 
         Parameters
@@ -41,6 +41,8 @@ class Agent(object):
         self.grid = grid
         self.row_size = row_size
         self.col_size = col_size
+        self.num_agents = num_agents
+        self.num_symbols = num_symbols
         self.reward_this_turn = 0
 
     @property
@@ -154,15 +156,18 @@ HARVEST_VIEW_SIZE = 7
 
 class HarvestAgent(Agent):
 
-    def __init__(self, agent_id, start_pos, start_orientation, grid, view_len=HARVEST_VIEW_SIZE):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, num_agents, num_symbols, view_len=HARVEST_VIEW_SIZE):
         self.view_len = view_len
-        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len)
+        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len, num_agents, num_symbols)
         self.update_agent_pos(start_pos)
         self.update_agent_rot(start_orientation)
 
     @property
     def action_space(self):
-        return Discrete(8)
+        action_dimension = [8]
+        for i in range(self.num_agents):
+            action_dimension.append(self.num_symbols)
+        return MultiDiscrete(action_dimension)
 
     # Ugh, this is gross, this leads to the actions basically being
     # defined in two places
@@ -172,8 +177,13 @@ class HarvestAgent(Agent):
 
     @property
     def observation_space(self):
-        return Box(low=0.0, high=0.0, shape=(2 * self.view_len + 1,
+        action_dimension = []
+        for i in range(self.num_agents):
+            action_dimension.append(self.num_symbols)
+        return Tuple((Box(low=0.0, high=255.0, shape=(2 * self.view_len + 1,
                                              2 * self.view_len + 1, 3), dtype=np.float32)
+                     ,
+                     MultiDiscrete(action_dimension)))
 
     def hit(self, char):
         if char == 'F':
@@ -203,16 +213,12 @@ CLEANUP_VIEW_SIZE = 7
 
 
 class CleanupAgent(Agent):
-    def __init__(self, agent_id, start_pos, start_orientation, grid, view_len=CLEANUP_VIEW_SIZE):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, num_agents, num_symbols, view_len=CLEANUP_VIEW_SIZE):
         self.view_len = view_len
-        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len)
+        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len, num_agents, num_symbols)
         # remember what you've stepped on
         self.update_agent_pos(start_pos)
         self.update_agent_rot(start_orientation)
-
-        #TODO: Currently hardcoding
-        self.num_agents = 5
-        self.num_symbols = 3
 
     @property
     def action_space(self):

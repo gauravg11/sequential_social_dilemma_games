@@ -23,6 +23,7 @@ parser.add_argument('--env', type=str, default='cleanup', help='Name of the envi
                                                                'cleanup or harvest.')
 parser.add_argument('--algorithm', type=str, default='A3C', help='Name of the rllib algorithm to use.')
 parser.add_argument('--num_agents', type=int, default=5, help='Number of agent policies')
+parser.add_argument('--num_symbols', type=int, default=3, help='Number of symbols in language')
 parser.add_argument('--train_batch_size', type=int, default=26000,
                     help='Size of the total dataset over which one epoch is computed.')
 parser.add_argument('--checkpoint_frequency', type=int, default=50,
@@ -63,23 +64,22 @@ MODEL_NAME = "conv_to_fc_net"
 
 
 def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
-          num_agents, use_gpus_for_workers=False, use_gpu_for_driver=False,
+          num_agents, num_symbols, use_gpus_for_workers=False, use_gpu_for_driver=False,
           num_workers_per_device=1):
 
     if env == 'harvest':
         def env_creator(_):
-            return HarvestEnv(num_agents=num_agents)
-        single_env = HarvestEnv()
+            return HarvestEnv(num_agents=num_agents, num_symbols=num_symbols)
     else:
         def env_creator(_):
-            return CleanupEnv(num_agents=num_agents)
-        single_env = CleanupEnv()
+            return CleanupEnv(num_agents=num_agents, num_symbols=num_symbols)
 
     env_name = env + "_env"
     register_env(env_name, env_creator)
 
-    obs_space = single_env.observation_space
-    act_space = single_env.action_space
+    env_instance = env_creator('')
+    obs_space = env_instance.observation_space
+    act_space = env_instance.action_space
 
     # register the custom model
     ModelCatalog.register_custom_model(MODEL_NAME, ObedienceLSTM)
@@ -145,6 +145,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                           "use_lstm": False,
                           "custom_options": {
                               "num_agents": num_agents,
+                              "num_symbols": num_symbols,
                               "fcnet_hiddens": [32, 32],
                               "cell_size": 128,
                           },
@@ -178,7 +179,7 @@ if __name__ == '__main__':
     alg_run, env_name, config = setup(args.env, hparams, args.algorithm,
                                       args.train_batch_size,
                                       args.num_cpus,
-                                      args.num_gpus, args.num_agents,
+                                      args.num_gpus, args.num_agents, args.num_symbols,
                                       args.use_gpus_for_workers,
                                       args.use_gpu_for_driver,
                                       args.num_workers_per_device)

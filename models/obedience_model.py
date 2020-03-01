@@ -29,9 +29,8 @@ class ObedienceLSTM(RecurrentTFModelV2):
         # visibility of agents. Currently we assume all the agents have equally sized action spaces.
         self.num_outputs = num_outputs
         self.num_agents = model_config["custom_options"]["num_agents"]
+        self.num_symbols = model_config["custom_options"]["num_symbols"]
         self.cell_size = model_config["custom_options"].get("cell_size")
-        # TODO: this shouldn't be hard-coded
-        self.num_symbols = 3
 
         # an extra none for the time dimension
         inputs = tf.keras.layers.Input(
