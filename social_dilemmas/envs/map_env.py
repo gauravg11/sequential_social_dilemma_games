@@ -163,10 +163,15 @@ class MapEnv(MultiAgentEnv):
 
         self.beam_pos = []
         agent_actions = {}
+        symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
         for agent_id, action in actions.items():
-            # TODO: action[0] means grabbing only the 'move' action not the symbol
-            agent_action = self.agents[agent_id].action_map(action[0])
+            game_action = action[0]
+            messages_sent = action[1:]
+
+            agent = self.agents[agent_id]
+            agent_action = agent.action_map(game_action)
             agent_actions[agent_id] = agent_action
+            symbol_store[agent.get_index()] = messages_sent
 
         # move
         self.update_moves(agent_actions)
@@ -193,8 +198,9 @@ class MapEnv(MultiAgentEnv):
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
             rgb_arr = self.rotate_view(agent.orientation, rgb_arr)
 
-            # the int here is important for this version of gym
-            observations[agent.agent_id] = (rgb_arr, np.zeros(self.num_agents, dtype=int))
+            incoming_symbols = symbol_store[:, agent.get_index()]
+
+            observations[agent.agent_id] = (rgb_arr, incoming_symbols)
 
             rewards[agent.agent_id] = agent.compute_reward()
             dones[agent.agent_id] = agent.get_done()

@@ -67,8 +67,6 @@ class CleanupEnv(MapEnv):
     def observation_space(self):
         # FIXME(ev) this is an information leak
         agents = list(self.agents.values())
-        print('obs space call ')
-        print(agents[0].num_agents, agents[0].num_symbols, agents[0].observation_space)
         return agents[0].observation_space
 
     def custom_reset(self):

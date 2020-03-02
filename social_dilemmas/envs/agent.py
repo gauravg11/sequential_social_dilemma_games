@@ -85,6 +85,10 @@ class Agent(object):
         self.reward_this_turn = 0
         return reward
 
+    # TODO: this is hacky and brittle
+    def get_index(self):
+        return int(self.agent_id[-1])
+
     def set_pos(self, new_pos):
         self.pos = np.array(new_pos)
 

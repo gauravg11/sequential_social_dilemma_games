@@ -4,11 +4,9 @@ import ray
 from ray import tune
 from ray.rllib.agents.registry import get_agent_class
 from ray.rllib.models import ModelCatalog
-from ray.rllib.models.preprocessors import NoPreprocessor
 
 from ray.tune import run_experiments
 from ray.tune.registry import register_env
-
 
 import tensorflow as tf
 
