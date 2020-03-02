@@ -75,6 +75,7 @@ class MapEnv(MultiAgentEnv):
         """
         self.num_agents = num_agents
         self.num_symbols = num_symbols
+        self.symbol_store = []
         self.base_map = self.ascii_to_numpy(ascii_map)
         # map without agents or beams
         self.world_map = np.full((len(self.base_map), len(self.base_map[0])), ' ')
@@ -163,7 +164,7 @@ class MapEnv(MultiAgentEnv):
 
         self.beam_pos = []
         agent_actions = {}
-        symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
+        self.symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
         for agent_id, action in actions.items():
             game_action = action[0]
             messages_sent = action[1:]
@@ -171,7 +172,10 @@ class MapEnv(MultiAgentEnv):
             agent = self.agents[agent_id]
             agent_action = agent.action_map(game_action)
             agent_actions[agent_id] = agent_action
-            symbol_store[agent.get_index()] = messages_sent
+            self.symbol_store[agent.get_index()] = messages_sent
+
+        # TODO: make this configurable, for now this can be used to toggle visibility
+        self.symbol_store = np.multiply(self.symbol_store, self._create_visibility_mask())
 
         # move
         self.update_moves(agent_actions)
@@ -198,7 +202,7 @@ class MapEnv(MultiAgentEnv):
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
             rgb_arr = self.rotate_view(agent.orientation, rgb_arr)
 
-            incoming_symbols = symbol_store[:, agent.get_index()]
+            incoming_symbols = self.symbol_store[:, agent.get_index()]
 
             observations[agent.agent_id] = (rgb_arr, incoming_symbols)
 
@@ -206,6 +210,29 @@ class MapEnv(MultiAgentEnv):
             dones[agent.agent_id] = agent.get_done()
         dones["__all__"] = np.any(list(dones.values()))
         return observations, rewards, dones, info
+
+    def _create_visibility_mask(self):
+        visibility_mask = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
+        for agent1 in self.agents.values():
+            for agent2 in self.agents.values():
+                visibility_mask[agent1.get_index(), agent2.get_index()] = 1 if self._find_visible_agents(agent1, agent2) else 0
+        return visibility_mask
+
+    def _find_visible_agents(self, agent1, agent2):
+        """Returns whether agent2 can be seen by agent1"""
+
+        if agent1.get_index() == agent2.get_index():
+            return False
+
+        agent_pos = agent1.get_pos()
+        upper_lim = int(agent_pos[0] + agent1.row_size)
+        lower_lim = int(agent_pos[0] - agent1.row_size)
+        left_lim = int(agent_pos[1] - agent1.col_size)
+        right_lim = int(agent_pos[1] + agent1.col_size)
+
+        return (lower_lim <= agent2.get_pos()[0] <= upper_lim
+                and
+                left_lim <= agent2.get_pos()[1] <= right_lim)
 
     def reset(self):
         """Reset the environment.
