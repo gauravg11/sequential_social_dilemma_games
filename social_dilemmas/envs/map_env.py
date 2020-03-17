@@ -164,15 +164,26 @@ class MapEnv(MultiAgentEnv):
 
         self.beam_pos = []
         agent_actions = {}
+        intrinsic_reward = {}
+        prev_symbol_store = self.symbol_store
         self.symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
+        all_game_actions = [i[0] for i in actions.values()]
         for agent_id, action in actions.items():
             game_action = action[0]
-            messages_sent = action[1:]
+            messages_to_send = action[1:]
 
             agent = self.agents[agent_id]
             agent_action = agent.action_map(game_action)
             agent_actions[agent_id] = agent_action
-            self.symbol_store[agent.get_index()] = messages_sent
+            self.symbol_store[agent.get_index()] = messages_to_send
+
+            # Give me a reward for taking an action other people told me to
+            intrinsic_reward[agent_id] = agent.compute_intrinsic_reward(game_action,
+                                                                        prev_symbol_store[:, agent.get_index()])
+
+            # Give me a reward for other people doing what I told them to
+            intrinsic_reward[agent_id] += agent.compute_intrinsic_reward(all_game_actions,
+                                                                        prev_symbol_store[agent.get_index()])
 
         # TODO: make this configurable, for now this can be used to toggle visibility
         self.symbol_store = np.multiply(self.symbol_store, self._create_visibility_mask())
@@ -195,6 +206,7 @@ class MapEnv(MultiAgentEnv):
 
         observations = {}
         rewards = {}
+        environmentals = {}
         dones = {}
         info = {}
         for agent in self.agents.values():
@@ -206,9 +218,14 @@ class MapEnv(MultiAgentEnv):
 
             observations[agent.agent_id] = (rgb_arr, incoming_symbols)
 
-            rewards[agent.agent_id] = agent.compute_reward()
+            environmentals[agent.agent_id] = agent.compute_reward()
+            rewards[agent.agent_id] = environmentals[agent.agent_id] + intrinsic_reward[agent.agent_id]
             dones[agent.agent_id] = agent.get_done()
         dones["__all__"] = np.any(list(dones.values()))
+
+        for agent_id, intrinsic in intrinsic_reward.items():
+            info[agent_id] = {'intrinsic': intrinsic, 'environmental': environmentals[agent_id]}
+
         return observations, rewards, dones, info
 
     def _create_visibility_mask(self):
@@ -247,6 +264,7 @@ class MapEnv(MultiAgentEnv):
             to be zero.
         """
         self.beam_pos = []
+        self.symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
         self.agents = {}
         self.setup_agents()
         self.reset_map()

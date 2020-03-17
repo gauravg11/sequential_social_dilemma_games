@@ -17,17 +17,17 @@ from models.obedience_model import ObedienceLSTM
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', type=str, help='Name experiment will be stored under')
-parser.add_argument('--env', type=str, default='cleanup', help='Name of the environment to rollout. Can be '
+parser.add_argument('--env', type=str, default='harvest', help='Name of the environment to rollout. Can be '
                                                                'cleanup or harvest.')
 parser.add_argument('--algorithm', type=str, default='A3C', help='Name of the rllib algorithm to use.')
 parser.add_argument('--num_agents', type=int, default=5, help='Number of agent policies')
-parser.add_argument('--num_symbols', type=int, default=3, help='Number of symbols in language')
+parser.add_argument('--num_symbols', type=int, default=9, help='Number of symbols in language')
 parser.add_argument('--train_batch_size', type=int, default=26000,
                     help='Size of the total dataset over which one epoch is computed.')
 parser.add_argument('--checkpoint_frequency', type=int, default=50,
                     help='Number of steps before a checkpoint is saved.')
-parser.add_argument('--training_iterations', type=int, default=50, help='Total number of steps to train for')
-parser.add_argument('--num_cpus', type=int, default=2, help='Number of available CPUs')
+parser.add_argument('--training_iterations', type=int, default=5, help='Total number of steps to train for')
+parser.add_argument('--num_cpus', type=int, default=16, help='Number of available CPUs')
 parser.add_argument('--num_gpus', type=int, default=0, help='Number of available GPUs')
 parser.add_argument('--use_gpus_for_workers', action='store_true', default=False,
                     help='Set to true to run workers on GPUs rather than CPUs')
@@ -62,7 +62,7 @@ MODEL_NAME = "conv_to_fc_net"
 
 
 def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
-          num_agents, num_symbols, use_gpus_for_workers=False, use_gpu_for_driver=False,
+          num_agents, num_symbols, grid_search, use_gpus_for_workers=False, use_gpu_for_driver=False,
           num_workers_per_device=1):
 
     if env == 'harvest':
@@ -103,6 +103,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
     config['env_config']['func_create'] = env_creator
     config['env_config']['env_name'] = env_name
     # config['env_config']['run'] = algorithm
+    config['callbacks']['on_postprocess_traj'] = on_postprocess_traj
 
     # Calculate device configurations
     gpus_for_driver = int(use_gpu_for_driver)
@@ -120,10 +121,12 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
     # hyperparams
     config.update({
-                #"train_batch_size": train_batch_size,
+                "train_batch_size": train_batch_size,
                 "sample_batch_size": 50,
+                # "batch_mode": "complete_episodes",
+                "metrics_smoothing_episodes": 1,
                 "vf_loss_coeff": 0.1,
-                "horizon": 1000,
+                "horizon": 10, # TODO: this is worth playing with
                 # "gamma": 0.99,
                 "lr_schedule":
                 [[0, hparams['lr_init']],
@@ -150,7 +153,16 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                           "conv_filters": [[6, [3, 3], 1]],
                           #"lstm_cell_size": 128
                           # conv filters??
-                          }
+                          },
+
+                "evaluation_interval": 1,
+                "evaluation_num_episodes": 1,
+                "evaluation_num_workers": 1,
+                "evaluation_config": {
+                    # Example: overriding env_config, exploration, etc:
+                    # "env_config": {...},
+                    "explore": True,
+                },
                 # bunch of other custom stuff wrapped in tune
     })
 
@@ -159,6 +171,27 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
         pass
 
     return algorithm, env_name, config
+
+
+def on_postprocess_traj(info):
+    # print('TAG on_postprocess_traj')
+    # info has keys episode, agent_id, pre_batch, post_batch, all_pre_batches
+    # post batch has
+    # dict_keys(['t', 'eps_id', 'agent_index', 'obs', 'actions', 'rewards', 'prev_actions',
+    # 'prev_rewards', 'dones', 'infos', 'new_obs', 'action_prob', 'action_logp', 'vf_preds',
+    # 'state_in_0', 'state_in_1', 'state_out_0', 'state_out_1', 'unroll_id', 'advantages',
+    # 'value_targets'])
+
+    # print(info['post_batch']['infos'])
+    infos = info['post_batch']['infos']
+    intrinsic_vals = [f['intrinsic'] for f in infos]
+    env_vals = [f['environmental'] for f in infos]
+    # total_vals = [f['intrinsic'] + f['environmental'] for f in infos]
+
+    episode = info['episode']
+    # episode.custom_metrics["totals"] = sum(total_vals)
+    episode.custom_metrics["envs"] = sum(env_vals)
+    episode.custom_metrics["intrinsics"] = sum(intrinsic_vals)
 
 
 # def main(unused_argv):
@@ -178,6 +211,7 @@ if __name__ == '__main__':
                                       args.train_batch_size,
                                       args.num_cpus,
                                       args.num_gpus, args.num_agents, args.num_symbols,
+                                      args.grid_search,
                                       args.use_gpus_for_workers,
                                       args.use_gpu_for_driver,
                                       args.num_workers_per_device)
@@ -197,6 +231,8 @@ if __name__ == '__main__':
         },
         'checkpoint_freq': args.checkpoint_frequency,
         "config": config,
+        'reuse_actors': True,
     }
 
-    tune.run(**exp_dict)
+    analysis = tune.run(**exp_dict)
+    print(analysis.get_best_config(metric='custom_metrics/envs_mean'))

@@ -85,6 +85,13 @@ class Agent(object):
         self.reward_this_turn = 0
         return reward
 
+    def compute_intrinsic_reward(self, game_action, prev_symbols):
+        # symbol 0 maps to no_symbol, symbol 1 maps to action 1
+        prev_symbols = prev_symbols - 1
+        successes = np.count_nonzero(prev_symbols == game_action)
+        # TODO: super-hardcoded, needs a base value...maybe a weight?
+        return successes * 0.1
+
     # TODO: this is hacky and brittle
     def get_index(self):
         return int(self.agent_id[-1])

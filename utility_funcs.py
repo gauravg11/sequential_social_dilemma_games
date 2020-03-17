@@ -33,6 +33,7 @@ def make_video_from_rgb_imgs(rgb_arrs, vid_path, video_name='trajectory',
     if vid_path[-1] != '/':
         vid_path += '/'
     video_path = vid_path + video_name + '.mp4'
+    # print(video_path)
 
     if resize is not None:
         width, height = resize
@@ -43,6 +44,7 @@ def make_video_from_rgb_imgs(rgb_arrs, vid_path, video_name='trajectory',
     fourcc = cv2.VideoWriter_fourcc(*format)
     video = cv2.VideoWriter(video_path, fourcc, float(fps), (width, height))
 
+    # print(rgb_arrs)
     for i, image in enumerate(rgb_arrs):
         percent_done = int((i / len(rgb_arrs)) * 100)
         if percent_done % 20 == 0:
