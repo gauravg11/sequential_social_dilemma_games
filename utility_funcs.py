@@ -46,7 +46,8 @@ def make_video_from_rgb_imgs(rgb_arrs, vid_path, video_name='trajectory',
     for i, image in enumerate(rgb_arrs):
         percent_done = int((i / len(rgb_arrs)) * 100)
         if percent_done % 20 == 0:
-            print("\t...", percent_done, "% of frames rendered")
+            pass
+            # print("\t...", percent_done, "% of frames rendered")
         if resize is not None:
             image = cv2.resize(image, resize, interpolation=cv2.INTER_NEAREST)
         video.write(image)

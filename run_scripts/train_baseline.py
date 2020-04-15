@@ -1,7 +1,7 @@
 import ray
 from ray import tune
 from ray.rllib.agents.registry import get_agent_class
-from ray.rllib.agents.ppo.ppo_policy_graph import PPOPolicyGraph
+from ray.rllib.agents.ppo.ppo_policy import PPOTFPolicy
 from ray.rllib.models import ModelCatalog
 from ray.tune import run_experiments
 from ray.tune.registry import register_env
@@ -54,12 +54,12 @@ tf.app.flags.DEFINE_float(
 harvest_default_params = {
     'lr_init': 0.00136,
     'lr_final': 0.000028,
-    'entropy_coeff': -.000687}
+    'entropy_coeff': .000687}
 
 cleanup_default_params = {
     'lr_init': 0.00126,
     'lr_final': 0.000012,
-    'entropy_coeff': -.00176}
+    'entropy_coeff': .00176}
 
 
 def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
@@ -83,7 +83,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
     # Each policy can have a different configuration (including custom model)
     def gen_policy():
-        return (PPOPolicyGraph, obs_space, act_space, {})
+        return (PPOTFPolicy, obs_space, act_space, {})
 
     # Setup PPO with an ensemble of `num_policies` different policy graphs
     policy_graphs = {}
@@ -123,6 +123,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
     config.update({
                 "train_batch_size": train_batch_size,
                 "horizon": 1000,
+                # "gamma": 0.99,
                 "lr_schedule":
                 [[0, hparams['lr_init']],
                     [20000000, hparams['lr_final']]],
@@ -133,11 +134,12 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                 "num_cpus_per_worker": num_cpus_per_worker,   # Can be a fraction
                 "entropy_coeff": hparams['entropy_coeff'],
                 "multiagent": {
-                    "policy_graphs": policy_graphs,
+                    "policies": policy_graphs,
                     "policy_mapping_fn": tune.function(policy_mapping_fn),
                 },
                 "model": {"custom_model": "conv_to_fc_net", "use_lstm": True,
                           "lstm_cell_size": 128}
+                #conv filters??
 
     })
     return algorithm, env_name, config

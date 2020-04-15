@@ -1,7 +1,6 @@
 """Base class for an agent that defines the possible actions. """
 
-from gym.spaces import Box
-from gym.spaces import Discrete
+from gym.spaces import Box, Discrete, Tuple, MultiDiscrete
 import numpy as np
 import utility_funcs as util
 
@@ -14,10 +13,18 @@ BASE_ACTIONS = {0: 'MOVE_LEFT',  # Move left
                 5: 'TURN_CLOCKWISE',  # Rotate counter clockwise
                 6: 'TURN_COUNTERCLOCKWISE'}  # Rotate clockwise
 
+REDUCED_VOCAB_MAPPING = {0: 0, 1: 0, 2: 0, 3: 0,
+                         4: 1,
+                         5: 2, 6: 2,
+                         7: 3,
+                         8: 4}
+
+MAP_follower = {'agent-0': .01, 'agent-1': .01, 'agent-2': .001, 'agent-3': .001, 'agent-4': .001}
+MAP_leader = {'agent-0': .001, 'agent-1': .001, 'agent-2': .01, 'agent-3': .01, 'agent-4': .01}
 
 class Agent(object):
 
-    def __init__(self, agent_id, start_pos, start_orientation, grid, row_size, col_size):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, row_size, col_size, num_agents, num_symbols):
         """Superclass for all agents.
 
         Parameters
@@ -36,16 +43,19 @@ class Agent(object):
             how many columns left and right the agent can look
         """
         self.agent_id = agent_id
+        self.index = int(self.agent_id[-1])
         self.pos = np.array(start_pos)
         self.orientation = start_orientation
         # TODO(ev) change grid to env, this name is not very informative
         self.grid = grid
         self.row_size = row_size
         self.col_size = col_size
+        self.num_agents = num_agents
+        self.num_symbols = num_symbols
         self.reward_this_turn = 0
 
-    @property
-    def action_space(self):
+    @staticmethod
+    def action_space(num_agents, num_symbols):
         """Identify the dimensions and bounds of the action space.
 
         MUST BE implemented in new environments.
@@ -57,8 +67,8 @@ class Agent(object):
         """
         raise NotImplementedError
 
-    @property
-    def observation_space(self):
+    @staticmethod
+    def observation_space(num_agents, num_symbols, view_len):
         """Identify the dimensions and bounds of the observation space.
 
         MUST BE implemented in new environments.
@@ -83,6 +93,28 @@ class Agent(object):
         reward = self.reward_this_turn
         self.reward_this_turn = 0
         return reward
+
+    def compute_intrinsic_reward_reduced_vocab(self, game_action, prev_symbols, weight):
+        prev_symbols = prev_symbols - 1
+        if isinstance(game_action, list):
+            # weight = MAP_leader[self.agent_id] # Used to define explicit leader-followers
+            for i, action in enumerate(game_action):
+                game_action[i] = REDUCED_VOCAB_MAPPING[action]
+        else:
+            # weight = MAP_follower[self.agent_id] # Used to define explicit leader-followers
+            game_action = REDUCED_VOCAB_MAPPING[game_action]
+        successes = np.count_nonzero(prev_symbols == game_action)
+        return successes * weight
+
+    def compute_intrinsic_reward(self, game_action, prev_symbols, weight):
+        # symbol 0 maps to no_symbol, symbol 1 maps to action 1
+        prev_symbols = prev_symbols - 1
+        successes = np.count_nonzero(prev_symbols == game_action)
+        return successes * weight
+
+    # TODO: this is hacky and brittle
+    def get_index(self):
+        return self.index
 
     def set_pos(self, new_pos):
         self.pos = np.array(new_pos)
@@ -155,15 +187,18 @@ HARVEST_VIEW_SIZE = 7
 
 class HarvestAgent(Agent):
 
-    def __init__(self, agent_id, start_pos, start_orientation, grid, view_len=HARVEST_VIEW_SIZE):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, num_agents, num_symbols, view_len=HARVEST_VIEW_SIZE):
         self.view_len = view_len
-        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len)
+        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len, num_agents, num_symbols)
         self.update_agent_pos(start_pos)
         self.update_agent_rot(start_orientation)
 
-    @property
-    def action_space(self):
-        return Discrete(8)
+    @staticmethod
+    def action_space(num_agents, num_symbols):
+        action_dimension = [8]
+        for i in range(num_agents):
+            action_dimension.append(num_symbols)
+        return MultiDiscrete(action_dimension)
 
     # Ugh, this is gross, this leads to the actions basically being
     # defined in two places
@@ -171,10 +206,16 @@ class HarvestAgent(Agent):
         """Maps action_number to a desired action in the map"""
         return HARVEST_ACTIONS[action_number]
 
-    @property
-    def observation_space(self):
-        return Box(low=0.0, high=0.0, shape=(2 * self.view_len + 1,
-                                             2 * self.view_len + 1, 3), dtype=np.float32)
+    # @property
+    @staticmethod
+    def observation_space(num_agents, num_symbols, view_len=HARVEST_VIEW_SIZE):
+        action_dimension = []
+        for i in range(num_agents):
+            action_dimension.append(num_symbols)
+        return Tuple((Box(low=0.0, high=255.0, shape=(2 * view_len + 1,
+                                             2 * view_len + 1, 3), dtype=np.float32)
+                     ,
+                     MultiDiscrete(action_dimension)))
 
     def hit(self, char):
         if char == 'F':
@@ -204,21 +245,29 @@ CLEANUP_VIEW_SIZE = 7
 
 
 class CleanupAgent(Agent):
-    def __init__(self, agent_id, start_pos, start_orientation, grid, view_len=CLEANUP_VIEW_SIZE):
+    def __init__(self, agent_id, start_pos, start_orientation, grid, num_agents, num_symbols, view_len=CLEANUP_VIEW_SIZE):
         self.view_len = view_len
-        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len)
+        super().__init__(agent_id, start_pos, start_orientation, grid, view_len, view_len, num_agents, num_symbols)
         # remember what you've stepped on
         self.update_agent_pos(start_pos)
         self.update_agent_rot(start_orientation)
 
-    @property
-    def action_space(self):
-        return Discrete(9)
+    @staticmethod
+    def action_space(num_agents, num_symbols):
+        action_dimension = [9]
+        for i in range(num_agents):
+            action_dimension.append(num_symbols)
+        return MultiDiscrete(action_dimension)
 
-    @property
-    def observation_space(self):
-        return Box(low=0.0, high=0.0, shape=(2 * self.view_len + 1,
-                                             2 * self.view_len + 1, 3), dtype=np.float32)
+    @staticmethod
+    def observation_space(num_agents, num_symbols, view_len=CLEANUP_VIEW_SIZE):
+        action_dimension = []
+        for i in range(num_agents):
+            action_dimension.append(num_symbols)
+        return Tuple((Box(low=0.0, high=255.0, shape=(2 * view_len + 1,
+                                             2 * view_len + 1, 3), dtype=np.float32)
+                     ,
+                     MultiDiscrete(action_dimension)))
 
     # Ugh, this is gross, this leads to the actions basically being
     # defined in two places

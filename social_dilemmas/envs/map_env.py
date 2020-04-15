@@ -58,7 +58,7 @@ DEFAULT_COLOURS = {' ': [0, 0, 0],  # Black background
 
 class MapEnv(MultiAgentEnv):
 
-    def __init__(self, ascii_map, num_agents=1, render=True, color_map=None):
+    def __init__(self, env_config, ascii_map, render=True, color_map=None):
         """
 
         Parameters
@@ -73,7 +73,11 @@ class MapEnv(MultiAgentEnv):
         color_map: dict
             Specifies how to convert between ascii chars and colors
         """
-        self.num_agents = num_agents
+        self.num_agents = env_config['num_agents']
+        self.num_symbols = env_config['num_symbols']
+        self.obedience_weight = env_config['obedience_weight']
+        self.leadership_weight = env_config['leadership_weight']
+        self.symbol_store = []
         self.base_map = self.ascii_to_numpy(ascii_map)
         # map without agents or beams
         self.world_map = np.full((len(self.base_map), len(self.base_map[0])), ' ')
@@ -162,9 +166,31 @@ class MapEnv(MultiAgentEnv):
 
         self.beam_pos = []
         agent_actions = {}
+        intrinsic_reward = {}
+        prev_symbol_store = self.symbol_store
+        self.symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
+        all_game_actions = [i[0] for i in actions.values()]
         for agent_id, action in actions.items():
-            agent_action = self.agents[agent_id].action_map(action)
+            game_action = action[0]
+            messages_to_send = action[1:]
+
+            agent = self.agents[agent_id]
+            agent_action = agent.action_map(game_action)
             agent_actions[agent_id] = agent_action
+            self.symbol_store[agent.get_index()] = messages_to_send
+
+            # Give me a reward for taking an action other people told me to
+            intrinsic_reward[agent_id] = agent.compute_intrinsic_reward(game_action,
+                                                                        prev_symbol_store[:, agent.get_index()],
+                                                                        self.obedience_weight)
+
+            # Give me a reward for other people doing what I told them to
+            intrinsic_reward[agent_id] += agent.compute_intrinsic_reward(all_game_actions,
+                                                                         prev_symbol_store[agent.get_index()],
+                                                                         self.leadership_weight)
+
+        # TODO: make this configurable, for now this can be used to toggle visibility
+        self.symbol_store = np.multiply(self.symbol_store, self._create_visibility_mask())
 
         # move
         self.update_moves(agent_actions)
@@ -184,17 +210,50 @@ class MapEnv(MultiAgentEnv):
 
         observations = {}
         rewards = {}
+        environmentals = {}
         dones = {}
         info = {}
         for agent in self.agents.values():
             agent.grid = map_with_agents
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
             rgb_arr = self.rotate_view(agent.orientation, rgb_arr)
-            observations[agent.agent_id] = rgb_arr
-            rewards[agent.agent_id] = agent.compute_reward()
+
+            incoming_symbols = self.symbol_store[:, agent.get_index()]
+
+            observations[agent.agent_id] = (rgb_arr, incoming_symbols)
+
+            environmentals[agent.agent_id] = agent.compute_reward()
+            rewards[agent.agent_id] = environmentals[agent.agent_id] + intrinsic_reward[agent.agent_id]
             dones[agent.agent_id] = agent.get_done()
         dones["__all__"] = np.any(list(dones.values()))
+
+        for agent_id, intrinsic in intrinsic_reward.items():
+            info[agent_id] = {'intrinsic': intrinsic, 'environmental': environmentals[agent_id]}
+
         return observations, rewards, dones, info
+
+    def _create_visibility_mask(self):
+        visibility_mask = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
+        for agent1 in self.agents.values():
+            for agent2 in self.agents.values():
+                visibility_mask[agent1.get_index(), agent2.get_index()] = 1 if self._find_visible_agents(agent1, agent2) else 0
+        return visibility_mask
+
+    def _find_visible_agents(self, agent1, agent2):
+        """Returns whether agent2 can be seen by agent1"""
+
+        if agent1.get_index() == agent2.get_index():
+            return False
+
+        agent_pos = agent1.get_pos()
+        upper_lim = int(agent_pos[0] + agent1.row_size)
+        lower_lim = int(agent_pos[0] - agent1.row_size)
+        left_lim = int(agent_pos[1] - agent1.col_size)
+        right_lim = int(agent_pos[1] + agent1.col_size)
+
+        return (lower_lim <= agent2.get_pos()[0] <= upper_lim
+                and
+                left_lim <= agent2.get_pos()[1] <= right_lim)
 
     def reset(self):
         """Reset the environment.
@@ -209,6 +268,7 @@ class MapEnv(MultiAgentEnv):
             to be zero.
         """
         self.beam_pos = []
+        self.symbol_store = np.zeros(shape=(self.num_agents, self.num_agents), dtype=int)
         self.agents = {}
         self.setup_agents()
         self.reset_map()
@@ -222,7 +282,9 @@ class MapEnv(MultiAgentEnv):
             # agent.grid = util.return_view(map_with_agents, agent.pos,
             #                               agent.row_size, agent.col_size)
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
-            observations[agent.agent_id] = rgb_arr
+
+            # the int here is important for this version of gym
+            observations[agent.agent_id] = (rgb_arr, np.zeros(self.num_agents, dtype=int))
         return observations
 
     @property

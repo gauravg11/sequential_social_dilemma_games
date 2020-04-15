@@ -13,10 +13,11 @@ from ray.rllib.agents.registry import get_agent_class
 from ray.rllib.models import ModelCatalog
 from ray.tune.registry import register_env
 from ray.cloudpickle import cloudpickle
-from ray.rllib.evaluation.sample_batch import DEFAULT_POLICY_ID
+#from ray.rllib.evaluation.sample_batch import DEFAULT_POLICY_ID
+from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
 # from ray.rllib.evaluation.sampler import clip_action
 
-from models.conv_to_fc_net import ConvToFCNet
+from models.obedience_model import ObedienceLSTM
 import utility_funcs
 
 
@@ -41,10 +42,11 @@ def visualizer_rllib(args):
 
     config = get_rllib_config(result_dir)
     pkl = get_rllib_pkl(result_dir)
+    result = pkl
 
     # check if we have a multiagent scenario but in a
     # backwards compatible way
-    if config.get('multiagent', {}).get('policy_graphs', {}):
+    if config.get('multiagent', {}).get('policies', {}):
         multiagent = True
         config['multiagent'] = pkl['multiagent']
     else:
@@ -53,9 +55,9 @@ def visualizer_rllib(args):
     # Create and register a gym+rllib env
     env_creator = pkl['env_config']['func_create']
     env_name = config['env_config']['env_name']
-    register_env(env_name, env_creator.func)
+    register_env(env_name, env_creator)
 
-    ModelCatalog.register_custom_model("conv_to_fc_net", ConvToFCNet)
+    ModelCatalog.register_custom_model("conv_to_fc_net", ObedienceLSTM)
 
     # Determine agent and checkpoint
     config_run = config['env_config']['run'] if 'run' in config['env_config'] \
@@ -87,7 +89,7 @@ def visualizer_rllib(args):
         config['num_workers'] = 0
 
     # create the agent that will be used to compute the actions
-    agent = agent_cls(env=env_name, config=config)
+    agent = agent_cls(env=env_name, config=result)
     checkpoint = result_dir + '/checkpoint_' + args.checkpoint_num
     checkpoint = checkpoint + '/checkpoint-' + args.checkpoint_num
     print('Loading checkpoint', checkpoint)

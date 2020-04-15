@@ -25,9 +25,8 @@ appleRespawnProbability = 0.05
 
 class CleanupEnv(MapEnv):
 
-    def __init__(self, ascii_map=CLEANUP_MAP, num_agents=1, render=False):
-        super().__init__(ascii_map, num_agents, render)
-
+    def __init__(self, env_config, ascii_map=CLEANUP_MAP, render=False):
+        super().__init__(env_config, ascii_map, render)
         # compute potential waste area
         unique, counts = np.unique(self.base_map, return_counts=True)
         counts_dict = dict(zip(unique, counts))
@@ -59,16 +58,13 @@ class CleanupEnv(MapEnv):
 
         self.color_map.update(CLEANUP_COLORS)
 
-    @property
-    def action_space(self):
-        agents = list(self.agents.values())
-        return agents[0].action_space
+    @staticmethod
+    def action_space(num_agents, num_symbols):
+        return CleanupAgent.action_space(num_agents, num_symbols)
 
-    @property
-    def observation_space(self):
-        # FIXME(ev) this is an information leak
-        agents = list(self.agents.values())
-        return agents[0].observation_space
+    @staticmethod
+    def observation_space(num_agents, num_symbols):
+        return CleanupAgent.observation_space(num_agents, num_symbols)
 
     def custom_reset(self):
         """Initialize the walls and the waste"""
@@ -115,7 +111,7 @@ class CleanupEnv(MapEnv):
             # grid = util.return_view(map_with_agents, spawn_point,
             #                         CLEANUP_VIEW_SIZE, CLEANUP_VIEW_SIZE)
             # agent = CleanupAgent(agent_id, spawn_point, rotation, grid)
-            agent = CleanupAgent(agent_id, spawn_point, rotation, map_with_agents)
+            agent = CleanupAgent(agent_id, spawn_point, rotation, map_with_agents, self.num_agents, self.num_symbols)
             self.agents[agent_id] = agent
 
     def spawn_apples_and_waste(self):
