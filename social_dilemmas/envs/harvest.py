@@ -14,23 +14,21 @@ SPAWN_PROB = [0, 0.005, 0.02, 0.05]
 
 class HarvestEnv(MapEnv):
 
-    def __init__(self, ascii_map=HARVEST_MAP, num_agents=1, num_symbols=3, render=False):
-        super().__init__(ascii_map, num_agents, num_symbols, render)
+    def __init__(self, env_config, ascii_map=HARVEST_MAP, render=False):
+        super().__init__(env_config, ascii_map, render)
         self.apple_points = []
         for row in range(self.base_map.shape[0]):
             for col in range(self.base_map.shape[1]):
                 if self.base_map[row, col] == 'A':
                     self.apple_points.append([row, col])
 
-    @property
-    def action_space(self):
-        agents = list(self.agents.values())
-        return agents[0].action_space
+    @staticmethod
+    def action_space(num_agents, num_symbols):
+        return HarvestAgent.action_space(num_agents, num_symbols)
 
-    @property
-    def observation_space(self):
-        agents = list(self.agents.values())
-        return agents[0].observation_space
+    @staticmethod
+    def observation_space(num_agents, num_symbols):
+        return HarvestAgent.observation_space(num_agents, num_symbols)
 
     def setup_agents(self):
         map_with_agents = self.get_map_with_agents()

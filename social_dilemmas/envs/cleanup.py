@@ -25,8 +25,8 @@ appleRespawnProbability = 0.05
 
 class CleanupEnv(MapEnv):
 
-    def __init__(self, ascii_map=CLEANUP_MAP, num_agents=1, num_symbols=3, render=False):
-        super().__init__(ascii_map, num_agents, num_symbols, render)
+    def __init__(self, env_config, ascii_map=CLEANUP_MAP, render=False):
+        super().__init__(env_config, ascii_map, render)
         # compute potential waste area
         unique, counts = np.unique(self.base_map, return_counts=True)
         counts_dict = dict(zip(unique, counts))
@@ -58,16 +58,13 @@ class CleanupEnv(MapEnv):
 
         self.color_map.update(CLEANUP_COLORS)
 
-    @property
-    def action_space(self):
-        agents = list(self.agents.values())
-        return agents[0].action_space
+    @staticmethod
+    def action_space(num_agents, num_symbols):
+        return CleanupAgent.action_space(num_agents, num_symbols)
 
-    @property
-    def observation_space(self):
-        # FIXME(ev) this is an information leak
-        agents = list(self.agents.values())
-        return agents[0].observation_space
+    @staticmethod
+    def observation_space(num_agents, num_symbols):
+        return CleanupAgent.observation_space(num_agents, num_symbols)
 
     def custom_reset(self):
         """Initialize the walls and the waste"""

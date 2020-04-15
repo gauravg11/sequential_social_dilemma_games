@@ -58,7 +58,7 @@ DEFAULT_COLOURS = {' ': [0, 0, 0],  # Black background
 
 class MapEnv(MultiAgentEnv):
 
-    def __init__(self, ascii_map, num_agents=1, num_symbols=3, render=True, color_map=None):
+    def __init__(self, env_config, ascii_map, render=True, color_map=None):
         """
 
         Parameters
@@ -73,8 +73,10 @@ class MapEnv(MultiAgentEnv):
         color_map: dict
             Specifies how to convert between ascii chars and colors
         """
-        self.num_agents = num_agents
-        self.num_symbols = num_symbols
+        self.num_agents = env_config['num_agents']
+        self.num_symbols = env_config['num_symbols']
+        self.obedience_weight = env_config['obedience_weight']
+        self.leadership_weight = env_config['leadership_weight']
         self.symbol_store = []
         self.base_map = self.ascii_to_numpy(ascii_map)
         # map without agents or beams
@@ -179,11 +181,13 @@ class MapEnv(MultiAgentEnv):
 
             # Give me a reward for taking an action other people told me to
             intrinsic_reward[agent_id] = agent.compute_intrinsic_reward(game_action,
-                                                                        prev_symbol_store[:, agent.get_index()])
+                                                                        prev_symbol_store[:, agent.get_index()],
+                                                                        self.obedience_weight)
 
             # Give me a reward for other people doing what I told them to
             intrinsic_reward[agent_id] += agent.compute_intrinsic_reward(all_game_actions,
-                                                                        prev_symbol_store[agent.get_index()])
+                                                                         prev_symbol_store[agent.get_index()],
+                                                                         self.leadership_weight)
 
         # TODO: make this configurable, for now this can be used to toggle visibility
         self.symbol_store = np.multiply(self.symbol_store, self._create_visibility_mask())

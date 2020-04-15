@@ -24,10 +24,10 @@ parser.add_argument('--num_agents', type=int, default=5, help='Number of agent p
 parser.add_argument('--num_symbols', type=int, default=9, help='Number of symbols in language')
 parser.add_argument('--train_batch_size', type=int, default=26000,
                     help='Size of the total dataset over which one epoch is computed.')
-parser.add_argument('--checkpoint_frequency', type=int, default=50,
+parser.add_argument('--checkpoint_frequency', type=int, default=500,
                     help='Number of steps before a checkpoint is saved.')
-parser.add_argument('--training_iterations', type=int, default=5, help='Total number of steps to train for')
-parser.add_argument('--num_cpus', type=int, default=16, help='Number of available CPUs')
+parser.add_argument('--training_iterations', type=int, default=2500, help='Total number of steps to train for')
+parser.add_argument('--num_cpus', type=int, default=24, help='Number of available CPUs')
 parser.add_argument('--num_gpus', type=int, default=0, help='Number of available GPUs')
 parser.add_argument('--use_gpus_for_workers', action='store_true', default=False,
                     help='Set to true to run workers on GPUs rather than CPUs')
@@ -65,19 +65,23 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
           num_agents, num_symbols, grid_search, use_gpus_for_workers=False, use_gpu_for_driver=False,
           num_workers_per_device=1):
 
+    obs_space = None
+    act_space = None
     if env == 'harvest':
-        def env_creator(_):
-            return HarvestEnv(num_agents=num_agents, num_symbols=num_symbols)
+        obs_space = HarvestEnv.observation_space(num_agents, num_symbols)
+        act_space = HarvestEnv.action_space(num_agents, num_symbols)
+
+        def env_creator(env_config):
+            return HarvestEnv(env_config)
     else:
-        def env_creator(_):
-            return CleanupEnv(num_agents=num_agents, num_symbols=num_symbols)
+        obs_space = CleanupEnv.observation_space(num_agents, num_symbols)
+        act_space = CleanupEnv.action_space(num_agents, num_symbols)
+
+        def env_creator(env_config):
+            return CleanupEnv(env_config)
 
     env_name = env + "_env"
     register_env(env_name, env_creator)
-
-    env_instance = env_creator('')
-    obs_space = env_instance.observation_space
-    act_space = env_instance.action_space
 
     # register the custom model
     ModelCatalog.register_custom_model(MODEL_NAME, ObedienceLSTM)
@@ -124,10 +128,10 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                 "train_batch_size": train_batch_size,
                 "sample_batch_size": 50,
                 # "batch_mode": "complete_episodes",
-                "metrics_smoothing_episodes": 1,
+                # "metrics_smoothing_episodes": 1,
                 "vf_loss_coeff": 0.1,
-                "horizon": 10, # TODO: this is worth playing with
-                # "gamma": 0.99,
+                "horizon": 1000,
+                "gamma": 0.99,
                 "lr_schedule":
                 [[0, hparams['lr_init']],
                     [20000000, hparams['lr_final']]],
@@ -154,20 +158,21 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                           #"lstm_cell_size": 128
                           # conv filters??
                           },
-
-                "evaluation_interval": 1,
-                "evaluation_num_episodes": 1,
-                "evaluation_num_workers": 1,
-                "evaluation_config": {
-                    # Example: overriding env_config, exploration, etc:
-                    # "env_config": {...},
-                    "explore": True,
+                "env_config": {
+                    "num_agents": num_agents,
+                    "num_symbols": num_symbols,
+                    "obedience_weight": .001,
+                    "leadership_weight": .001,
                 },
-                # bunch of other custom stuff wrapped in tune
     })
 
+    if args.algorithm == "PPO":
+        config.update({"num_sgd_iter": 10,
+                       "sgd_minibatch_size": 500,
+                       "vf_loss_coeff": 1e-4
+        })
+
     if args.grid_search:
-        # TODO: even more tune stuff
         pass
 
     return algorithm, env_name, config
@@ -230,6 +235,7 @@ if __name__ == '__main__':
             "training_iteration": args.training_iterations
         },
         'checkpoint_freq': args.checkpoint_frequency,
+        'checkpoint_at_end': True,
         "config": config,
         'reuse_actors': True,
     }
